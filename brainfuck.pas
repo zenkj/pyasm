@@ -7,7 +7,8 @@ def translate(program):
     nextpc = 0
 
     $$$
-    .define aPtr, rbx
+    # test comment
+    .define aPtr, rbx # test comment on this line
     .define aState, r12
     .define aTapeBegin, r13
     .define aTapeEnd, r14
@@ -35,13 +36,19 @@ def translate(program):
       ret
     .endmacro
 
-    .type state, bf_state, aState
+    .type state:nopack
+      .ptr tape
+      .ptr get_char
+      .ptr put_char
+    .endtype
     $$$
 
+    $ .byte 'a"si\'b{}\'c\t', "ab{d\" ' ef\n", {TAPE_LENGTH/2}
+
     $ .code
-    $->bf_main:
+    $bf_main:
     $ prologue
-    $ mov aPtr, {'state->tape'}
+    $ mov aPtr, aState:state.tape
     $ lea aTapeBegin, [aPtr-1]
     $ lea aTapeEnd, [aPtr + {TAPE_LENGTH-1}]
 
@@ -81,13 +88,13 @@ def translate(program):
                 n += 1
             $ sub byte [aPtr], {n}
         elif i == ',':
-            $ call aword {'state->get_char'}
+            $ call aword aState:state.get_char
             $ postcall 1
             $ mov byte [aPtr], al
         elif i == '.':
             $ movzx r0, byte [aPtr]
             $ precall1 r0
-            $ call aword {'state->put_char'}
+            $ call aword aState:state.put_char
             $ postcall 2
         elif i == '[':
             if program[ip] == '-' and program[ip+1] == ']':
@@ -96,16 +103,16 @@ def translate(program):
                 $ mov byte [aPtr], al
             else:
                 $ cmp byte [aPtr], 0
-                $ jz =>{nextpc + 1}
-                $=>{nextpc}:
+                $ jz @{nextpc + 1}
+                $@{nextpc}:
                 rstack.append(nextpc)
                 nextpc += 2
         elif i == ']':
             if len(rstack) == 0:
                 raise ValueError("no corresponding '['")
             $ cmp byte [aPtr], 0
-            $ jnz =>{rstack[-1]}
-            $=>{rstack[-1]+1}:
+            $ jnz @{rstack[-1]}
+            $@{rstack[-1]+1}:
             rstack.pop()
         elif i == '\0':
             if len(rstack) > 0:
