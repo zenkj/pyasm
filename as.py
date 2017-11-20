@@ -161,37 +161,202 @@ class AS:
         self.asmap['adc-2'] = '::14:/a8i8|66::15:/a16i16|::15:/a32i32|:48:15:/a64i32' \
                          ''
     
-    # instruction structure:
-    #   prefix     rex     opcode    modrm       sib       displacement  immediate
-    #           0100 WRXB          mm reg r/m  ss iii bbb
-    #           7654 3210          76 543 210  76 543 210
-    #
-    # template structure
-    # [prefix]:[rex]:opcode:[modrm]/[options]
-    #
-    # template commands:
-    #   a
-    #     register AL/AX/EAX/RAX, a8/a16/a32/a64 respectively
-    #   i
-    #     signed immediate integer, i8/i16/i32/i64
-    #   I
-    #     unsigned immediate integer, I8/I16/I32/I64
-    #   f
-    #     floating point number, f32/f64
-    #   r
-    #     registers encoded in reg of modrm, and R in rex optionally.
-    #     r8/r16/r32/r64
-    #   R
-    #     registers encoded in reg of opcode, and B in rex optionally.
-    #     R8/R16/R32/R64
-    #   M
-    #     registers encoded in r/m of modrm, and B in rex optionally.
-    #     M8/M16/M32/M64
-    #   m
-    #     memory location encoded in r/m of modrm, and sib optionally.
-    #
-    #
+    
     def dotemplateone(self, tmpl, op, params):
+
+        """
+        处理一个指令模板 
+
+        x86_64指令结构:
+          prefix     rex     opcode    modrm       sib       displacement  immediate
+                  0100 WRXB          mm reg r/m  ss iii bbb
+                  7654 3210          76 543 210  76 543 210
+        
+        模板结构：
+        [prefix]:[rex]:opcode:[modrm]/[commands]
+        
+        模板命令列表:
+          a
+            register AL/AX/EAX/RAX, a8/a16/a32/a64 respectively
+          i
+            signed immediate integer, i8/i16/i32/i64
+          I
+            unsigned immediate integer, I8/I16/I32/I64
+          f
+            floating point number, f32/f64
+          r
+            registers encoded in reg of modrm, and R in rex optionally.
+            r8/r16/r32/r64
+          R
+            registers encoded in reg of opcode, and B in rex optionally.
+            R8/R16/R32/R64
+          M
+            registers encoded in r/m of modrm, and B in rex optionally.
+            M8/M16/M32/M64
+          m
+            memory location encoded in r/m of modrm, and sib optionally.
+
+        内存操作数结构：
+          sr:[base+index*scale+offset]
+          sr
+            段寄存器前缀，cs/ds/es/fs
+          base
+            基址寄存器
+          index
+            索引寄存器，除rsp外其他15个通用寄存器
+          scale
+            倍数，1/2/4/8
+          offset
+            偏移值，8位或32位
+
+        内存操作数处理流程：
+          1. 先把reg:state.ptr这种类型的转化为reg+nnn
+          2. 然后再取出segment register(opt)和[]中的内容
+              re.match(r'\s*((\w+)\s*:)?\s*\[\s*([^\]]+)\s*\]\s*', ' fs : [ rax + rdx * 4 - 5 ] ')
+          3. 根据段寄存器设置段前缀
+          4. 然后解析[]中的内容
+              re.split(r'\s*([+-])\s*', 'a + 4 * b - 5 '.strip())
+          5. 然后把scale*index取出来
+              re.split(r'\s*\*\s*', '4 * rbx'.strip())
+          6. 然后就是把基址/索引/倍数/偏移取出来，各种排列组合:
+             寄存器基址/索引*倍数/偏移，三部分每个都可以存在或不存在，
+             除去三部分都不存在的情况，共2*2*2-1 = 7种，加上rip相对地址，共8种
+
+             mod!=11 and r/m=100意味着存在SIB，有没有REX都不影响:
+               所以基址为rsp和r12时，不管有没有偏移，都只能使用SIB;
+             mod=0 and r/m=101意味着RIP相对寻址，有没有REX都不影响:
+               所以基址为rbp和r13并且没有偏移时，只能使用偏移0(mod=01, displacement=0)
+            
+        内存操作数种类(8种排列组合C1-C8)：
+          1. 寄存器基址
+            e.g.: [rax/rbx/rcx/rdx/rsp/rbp/rsi/rdi/r8-r15]
+            (1) rax/rbx/rcx/rdx/rsi/rdi:
+               mod    r/m
+               00     nnn(not 100 and 101)
+            (2) rsp:
+               mod    r/m       ss iii bbb
+               00     100       nn 100 100
+            (3) r12:
+             REX.B   mod    r/m    ss iii bbb
+               1      00    100    nn 100 100
+            (4) rbp:
+               mod    r/m   displacement
+                01    101   00000000
+            (5) r13:
+             REX.B   mod    r/m    displacement
+               1      01    101    00000000
+            (6) r8-r11/r14/r15:
+             REX.B   mod    r/m
+               1      00    nnn(not 100 and 101)
+            
+          2. 绝对地址
+            [1234]
+                mod    r/m      ss iii bbb   displacement
+                00     100      nn 100 101   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+            
+          3. 寄存器基址+偏移
+            e.g.: [rax/rbx/rcx/rdx/rsp/rbp/rsi/rdi/r8-r15 + 12]
+            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi + offset:
+              mod     r/m             displacement
+              01      nnn(not 100)    nnnnnnnn
+              10      nnn(not 100)    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+            (2) rsp + offset:
+               mod    r/m       ss iii bbb    displacement
+               01     100       nn 100 100    nnnnnnnn
+               10     100       nn 100 100    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+            (3) r12 + offset: 
+             REX.B   mod    r/m    ss iii bbb   displacement
+               1      01    100    nn 100 100   nnnnnnnn
+               1      10    100    nn 100 100   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+            (4) r8-r11/r13-r15 + offset:
+             REX.B   mod    r/m            displacement
+               1      01    nnn(not 100)   nnnnnnnn
+               1      10    nnn(not 100)   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+            
+          4. rip相对地址
+            e.g.: [rip+12]
+            mod   r/m   displacement
+             00   101   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+           
+          5. 索引*倍数 (不存在，有索引的时候必须有基址或32位偏移，这种编码为偏移=0)
+            e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8] (只有rsp不能作索引, 100意味着没有索引)
+            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi * 1/2/4/8:
+                mod    r/m      ss iii          bbb    displacement
+                00     100      00 nnn(not 100) 101    00000000 00000000 00000000 00000000
+                00     100      01 nnn(not 100) 101    00000000 00000000 00000000 00000000
+                00     100      10 nnn(not 100) 101    00000000 00000000 00000000 00000000
+                00     100      11 nnn(not 100) 101    00000000 00000000 00000000 00000000
+            (2) r8-r15 * 1/2/4/8:
+                REX.X  mod    r/m      ss iii             bbb    displacement
+                  1    00     100      00 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
+                  1    00     100      01 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
+                  1    00     100      10 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
+                  1    00     100      11 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
+            
+          6. 索引*倍数 + 寄存器基址
+            e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8 +
+                   rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi/r8-r15]
+            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rdi/rsi:
+                mod  r/m     ss iii          bbb
+                00   100     nn nnn(not 100) nnn(not 101)
+            (2) r8-r15*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rdi/rsi:
+                REX.X REX.B  mod  r/m     ss iii bbb
+                  1     0    00   100     nn nnn nnn(not 101)
+            (3) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + r8-r12/r14/r15:
+                REX.X REX.B  mod  r/m     ss iii          bbb
+                  0     1    00   100     nn nnn(not 100) nnn(not 101)
+            (4) r8-r15*1/2/4/8 + r8-r12/r14/r15:
+                REX.X REX.B  mod  r/m     ss iii bbb
+                  1     1    00   100     nn nnn nnn(not 101)
+            (5) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + rbp:
+                mod  r/m     ss iii          bbb  displacement
+                01   100     nn nnn(not 100) 101  00000000
+            (6) r8-r15*1/2/4/8 + rbp:
+                REX.X REX.B  mod  r/m     ss iii bbb  displacement
+                  1     0    01   100     nn nnn 101  00000000
+            (7) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + r13:
+                REX.X REX.B mod  r/m     ss iii          bbb  displacement
+                  0     1   01   100     nn nnn(not 100) 101  00000000
+            (8) r8-r15*1/2/4/8 + r13:
+                REX.X REX.B  mod  r/m     ss iii bbb  displacement
+                  1     1    01   100     nn nnn 101  00000000
+            
+          7. 索引*倍数 + 偏移 (只能32位偏移)
+            e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8 + 1234] (只有rsp不能作索引, 100意味着没有索引)
+            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi * 1/2/4/8 + offset:
+                mod    r/m      ss iii          bbb    displacement
+                00     100      00 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                00     100      01 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                00     100      10 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                00     100      11 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+            (2) r8-r15 * 1/2/4/8 + offset:
+                REX.X  mod    r/m      ss iii             bbb    displacement
+                  1    00     100      00 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                  1    00     100      01 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                  1    00     100      10 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                  1    00     100      11 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+
+          8. 寄存器基址+索引*倍数+偏移
+            e.g.: [rax/rbx/rcx/rdx/rbp/di/rsi/r8-r15 * 1/2/4/8 +
+                   rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi/r8-r15 + 1234]
+            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi + offset:
+                mod  r/m     ss iii          bbb   displacement
+                01   100     nn nnn(not 100) nnn   nnnnnnnn
+                10   100     nn nnn(not 100) nnn   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+            (2) r8-r15*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi + offset:
+                REX.X REX.B  mod  r/m     ss iii bbb   displacement
+                  1     0    01   100     nn nnn nnn   nnnnnnnn
+                  1     0    10   100     nn nnn nnn   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+            (3) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + r8-r15 + offset:
+                REX.X REX.B mod  r/m     ss iii          bbb  displacement
+                  0     1   01   100     nn nnn(not 100) nnn  nnnnnnnn
+                  0     1   10   100     nn nnn(not 100) nnn  nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+            (4) r8-r15*1/2/4/8 + r8-r15 + offset:
+                REX.X REX.B  mod  r/m     ss iii bbb  displacement
+                  1     1    01   100     nn nnn nnn  nnnnnnnn
+                  1     1    10   100     nn nnn nnn  nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+        """
+
         m = fullmatch(r'([0-9A-F]*):([0-9A-F]*):([0-9A-F]+):([0-9A-F]*)/([a-zA-Z0-9]*)', tmpl) 
         if not m: raise ValueError('Invalid template')
         sprefix = m.group(1)
@@ -262,6 +427,12 @@ class AS:
                     REX()[0] |= ((code&8)>>3)
                 MODRM()[0] |= (0xC0|(code&7))
             elif o == 'm': # memory in r/m in modrm, and sib optionally
+                base = None
+                index = None
+                scale = None
+                offset = None
+
+                negative = False
                 # 先把reg:state.ptr这种类型的转化为reg+nnn
                 p = params.pop(0)
                 p = sub(r'(\w+):([\w.]+)', \
@@ -279,18 +450,76 @@ class AS:
 
                 # 然后解析[]中的内容
                 #     re.split(r'\s*([+-])\s*', 'a + 4 * b - 5 '.strip())
-                addr = re.split('r\s*([+-])\s*', m.group(3).strip())
+                addr0 = re.split('r\s*([+-])\s*', m.group(3).strip())
+                addr = []
+
+                for item in addr0:
+                    if item == '+':
+                        negative = False
+                    elif item == '-':
+                        negative = True
+                    else:
+                        if negative:
+                            negative = False
+                            item = -int(item)
+                        addr.append(item)
                 
-                # 然后把scale*index取出来
+                # 然后把scale*index取出来，保证index不为rsp
                 #     re.split(r'\s*\*\s*', '4 * rbx'.strip())
-                # 然后就是各种排列组合了(寄存器基址/索引*倍数/偏移，每个都可以存在或不存在，
-                # 除去都不存在的情况，共2*2*2-1 = 7种，加上rip相对地址，共8种)
-                # mod!=11 and r/m=100意味着存在SIB，有没有REX都不影响:
-                #   所以基址为rsp和r12时，不管有没有偏移，都只能使用SIB;
-                # mod=0 and r/m=101意味着RIP相对寻址，有没有REX都不影响:
-                #   所以基址为rbp和r13并且没有偏移时，只能使用偏移0(mod=01, displacement=0)
-                #
+                for item in addr:
+                    item = item.strip()
+                    m = re.search(r'\*', item)
+                    if m:
+                        si = re.split(r'\s*\*\s*', item)
+                        if len(si) != 2: raise ValueError('item {} is not valid scaled index'.format(item))
+                        if index is not None: raise ValueError('duplicate index {}'.format(item))
+                        si0 = si[0].strip()
+                        si1 = si[1].strip()
+                        index, scale = (si0, si1) if len(si0)>len(si1) else (si1, si0)
+                        scale = Scale[scale]
+                        if index not in GPRbits or GPRbits[index] != 64:
+                            raise ValueError("index register should be 64-bit GPR")
+                        if index == 'rsp': raise ValueError("rsp can't be used as index register")
+                    elif item in GPRbits and GPRbits[item] == 64:
+                        if base is None:
+                            base = item
+                        elif index is None and scale is None:
+                            if item == 'rsp' and base == 'rsp':
+                                raise ValueError("rsp can't be used as index regiser")
+                            if item == 'rsp':
+                                index = base
+                                base = item
+                            else:
+                                index = item
+                            scale = 0
+                        else:
+                            raise ValueError('redundant register {}'.format(item))
+                    elif item == 'rip':
+                        if base is not None or index is not None:
+                            raise ValueError("rip can't be used with index register")
+                        base = item
+                    elif isinstance(item, int):
+                        offset = item
+                    else: # 不处理其他情况
+                        raise ValueError("invalid item {} for memory address".format(item))
+
+                if base is not None and index is None:
+                    if base == 'rip':
+                        # 4. rip相对寻址
+                        # mod   r/m   displacement
+                        #  00   101   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                        if offset is None: offset = 0
+                        MODRM() = (MODRM() & 0x38) | 0x5
+                        displacement = pack('i32', offset)
+                    else:
+                        if offset is None or offset == 0:
+                            # 1. 寄存器基址
+                        else:
+                            # 3. 寄存器基址+偏移
+
+                # 然后就是把基址/索引/倍数/偏移取出来，各种排列组合:
                 # 1. 寄存器基址
+                if base is not None and index is None and (offset is None or offset == 0):
                 # e.g.: [rax/rbx/rcx/rdx/rsp/rbp/rsi/rdi/r8-r15]
                 # (1) rax/rbx/rcx/rdx/rsi/rdi:
                 #    mod    r/m
@@ -312,12 +541,14 @@ class AS:
                 #    1      00    nnn(not 100 and 101)
                 #
                 # 2. 绝对地址
+                elif base is None and index is None and offset is not None:
                 # [1234]
                 #     mod    r/m      ss iii bbb   displacement
                 #     00     100      nn 100 101   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
                 #
                 # 3. 寄存器基址+偏移
-                # e.g.: [rax/rbx/rcx/rdx/rsp/rbp/rsi/rdi/r8-r15+12]
+                elif base is not None and index is None and offset
+                # e.g.: [rax/rbx/rcx/rdx/rsp/rbp/rsi/rdi/r8-r15 + 12]
                 # (1) rax/rbx/rcx/rdx/rbp/rsi/rdi + offset:
                 #   mod     r/m             displacement
                 #   01      nnn(not 100)    nnnnnnnn
@@ -337,8 +568,6 @@ class AS:
                 #
                 # 4. rip相对地址
                 # e.g.: [rip+12]
-                # mod   r/m   displacement
-                #  00   101   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
                 #
                 # 5. 索引*倍数 (不存在，有索引的时候必须有基址或32位偏移，这种编码为偏移=0)
                 # e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8] (只有rsp不能作索引, 100意味着没有索引)
@@ -533,6 +762,13 @@ regAbits = {
     'ax':   16,
     'eax':  32,
     'rax':  64, # with REX prefix
+    }
+
+Scale = {
+    '1': 0,
+    '2': 1,
+    '4': 2,
+    '8': 3
     }
 
 GPRbits = {
