@@ -157,9 +157,16 @@ class AS:
 
         ########################## template #################################
         # instruction structure:
-        # [prefix]:[rex]:opcode:[modrm]/[options]
-        self.asmap['adc-2'] = '::14:/a8i8|66::15:/a16i16|::15:/a32i32|:48:15:/a64i32' \
-                         ''
+        # [prefix]:[rex]:opcode:[modrm]/[operands]
+        self.asmap['adc-2'] = '::14:/a8i8|66::15:/a16i16|::15:/a32i32|:48:15:/a64i32|' \
+                '::10:/R8r8|::10:/mr8|66::11:/R16r16|66::11:/mr16|::11:/R32r32|::11:/mr32|' \
+                ':48:11:/R64r64|:48:11:/mr64|::12:/r8R8|::12:/r8m|66::13:/r16R16|66::13:/r16m|' \
+                '::13:/r32R32|::13:/r32m|:48:13:/r64m'
+        self.asmap['adcb-2'] = '::80:10/R8i8|::80:10/mi8'
+        self.asmap['adcw-2'] = '66::83:10/R16i8|66::83:10/mi8|66::81:10/R16i16|66::81:10/mi16'
+        self.asmap['adcd-2'] = '::83:10/R32i8|::83:10/mi8|::81:10/R32i32|::81:10/mi32'
+        self.asmap['adcl-2'] = self.asmap['adcd-2']
+        self.asmap['adcq-2'] = ':48:83:10/R64i8|:48:83:10/mi8|:48:81:10/R64i32|:48:81:10/mi32'
     
     
     def dotemplateone(self, tmpl, op, params):
@@ -173,7 +180,7 @@ class AS:
                   7654 3210          76 543 210  76 543 210
         
         模板结构：
-        [prefix]:[rex]:opcode:[modrm]/[commands]
+        [prefix]:[rex]:opcode:[modrm]/[operands]
         
         模板命令列表:
           a
@@ -187,12 +194,12 @@ class AS:
           r
             registers encoded in reg of modrm, and R in rex optionally.
             r8/r16/r32/r64
-          R
+          c
             registers encoded in reg of opcode, and B in rex optionally.
-            R8/R16/R32/R64
-          M
+            c8/c16/c32/c64
+          R
             registers encoded in r/m of modrm, and B in rex optionally.
-            M8/M16/M32/M64
+            R8/R16/R32/R64
           m
             memory location encoded in r/m of modrm, and sib optionally.
 
@@ -414,7 +421,7 @@ class AS:
                 if code >= 8: # need REX
                     REX()[0] |= ((code&8)>>1)
                 MODRM()[0] |= ((code&7)<<3)
-            elif o == 'R': # reg in opcode, and B in rex optionally
+            elif o == 'c': # reg in opcode, and B in rex optionally
                 ensuren(n)
                 p = params.pop(0)
                 if GPRbits[p] != n:
@@ -423,7 +430,7 @@ class AS:
                 if code >= 8: # need REX
                     REX()[0] |= ((code&8)>>3)
                 opcode[-1] |= (code&7)
-            elif o == 'M': # register in r/m in modrm, and B in rex optioanlly
+            elif o == 'R': # register in r/m in modrm, and B in rex optioanlly
                 ensuren(n)
                 p = params.pop(0)
                 if GPRbits[p] != n:
