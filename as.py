@@ -1,4 +1,4 @@
-from re import match, fullmatch, sub, findall
+import re
 from ast import literal_eval as leval
 import struct
 
@@ -142,7 +142,7 @@ class AS:
 
     def initAsMap(self):
         def dottype(op, params):
-            m = fullmatch(r'\s*(\w+):?(\w*)\s*', params[0])
+            m = re.fullmatch(r'\s*(\w+):?(\w*)\s*', params[0])
             if not m:
                 raise ValueError
             name = m.group(1)
@@ -159,6 +159,8 @@ class AS:
         # instruction structure:
         # [prefix]:[rex]:opcode:[modrm]/[operands]
         self.asmap['adc-2'] = '::14:/a8i8|66::15:/a16i16|::15:/a32i32|:48:15:/a64i32|' \
+                '::80:10/R8i8|66::83:10/R16i8|66::81:10/R16i16|::83:10/R32i8|::81:10/R32i32|' \
+                ':48:83:10/R64i8|:48:81:10/R64i32|' \
                 '::10:/R8r8|::10:/mr8|66::11:/R16r16|66::11:/mr16|::11:/R32r32|::11:/mr32|' \
                 ':48:11:/R64r64|:48:11:/mr64|::12:/r8R8|::12:/r8m|66::13:/r16R16|66::13:/r16m|' \
                 '::13:/r32R32|::13:/r32m|:48:13:/r64m'
@@ -364,7 +366,7 @@ class AS:
                   1     1    10   100     nn nnn nnn  nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
         """
 
-        m = fullmatch(r'([0-9A-F]*):([0-9A-F]*):([0-9A-F]+):([0-9A-F]*)/([a-zA-Z0-9]*)', tmpl) 
+        m = re.fullmatch(r'([0-9A-F]*):([0-9A-F]*):([0-9A-F]+):([0-9A-F]*)/([a-zA-Z0-9]*)', tmpl) 
         if not m: raise ValueError('Invalid template')
         sprefix = m.group(1)
         srex    = m.group(2)
@@ -383,7 +385,7 @@ class AS:
 
         def REX():
             if len(rex) == 0:
-                rex.append(0)
+                rex.append(0x40)
             return rex
 
         def MODRM():
@@ -402,7 +404,7 @@ class AS:
                 return
             raise ValueError('invalid template {}'.format(tmpl))
         
-        for (o, sn) in findall(r'([a-zA-Z])([0-9]*)', soption):
+        for (o, sn) in re.findall(r'([a-zA-Z])([0-9]*)', soption):
             n = 0 if len(sn) == 0 else int(sn)
 
             if o == 'a':
@@ -446,14 +448,11 @@ class AS:
                 offset = None
 
                 negative = False
-                # 先把reg:state.ptr这种类型的转化为reg+nnn
                 p = params.pop(0)
-                p = sub(r'(\w+):([\w.]+)', \
-                        lambda m: '{}+{}'.format(m.group(1), self.tm.offsetof(m.group(2))), \
-                        p)
-                # 然后再取出segment register(opt)和[]中的内容
+
+                # 先取出segment register(opt)和[]中的内容
                 #     re.match(r'\s*((\w+)\s*:)?\s*\[\s*([^\]]+)\s*\]\s*', ' fs : [ rax + rdx * 4 - 5 ] ')
-                m = fullmatch(r'\s*((\w+)\s*:)?\s*\[\s*([^\]]+)\]\s*', p)
+                m = re.fullmatch(r'\s*((\w+)\s*:)?\s*\[\s*([^\]]+)\]\s*', p)
                 if not m: raise ValueError('{} is not valid memory addressing operand'.format(p))
 
                 # 根据段寄存器设置段前缀
@@ -462,8 +461,13 @@ class AS:
                     prefix.append(sprefix)
 
                 # 然后解析[]中的内容
+                # 把reg:state.ptr这种类型的转化为reg+nnn
+                addr0 = re.sub(r'(\w+):([\w.]+)', \
+                        lambda m: '{}+{}'.format(m.group(1), self.tm.offsetof(m.group(2))), \
+                        m.group(3))
+                # 解析[]种的内容
                 #     re.split(r'\s*([+-])\s*', 'a + 4 * b - 5 '.strip())
-                addr0 = re.split('r\s*([+-])\s*', m.group(3).strip())
+                addr0 = re.split(r'\s*([+-])\s*', addr0.strip())
                 addr = []
 
                 for item in addr0:
@@ -511,8 +515,8 @@ class AS:
                         if base is not None or index is not None:
                             raise ValueError("rip can't be used with index register")
                         base = item
-                    elif isinstance(item, int):
-                        offset = item
+                    elif isinstance(leval(item), int):
+                        offset = leval(item)
                     else: # 不处理其他情况
                         raise ValueError("invalid item {} for memory address".format(item))
 
@@ -600,7 +604,7 @@ class AS:
                 pass
 
     def splitargs(self, argline):
-        argline = fullmatch(r'(.*),?', argline).group(1)
+        argline = re.fullmatch(r'(.*),?', argline).group(1)
         i = 0
         length = len(argline)
 
@@ -642,17 +646,17 @@ class AS:
         return [arg.strip() for arg in args]
 
     def doline(self, line):
-        # ignore empty line
-        if fullmatch(r'\s*', line):
+        # ignore empty line and comment line
+        if re.fullmatch(r'\s*(#.*)?\s*', line):
             return
 
         # translate label
-        m = fullmatch(r'\s*(@?\w+)\s*:\s*', line)
+        m = re.fullmatch(r'\s*(@?\w+)\s*:\s*', line)
         if m: line = '.label ' + m.group(1)
 
         # split statement
-        m = fullmatch(r'\s*([-.\w]+)\s+(.*)\s*', line)
-        if not m: raise ValueError
+        m = re.fullmatch(r'\s*([-.\w]+)\s+(.*)\s*', line)
+        if not m: raise ValueError(line)
         opcode = m.group(1)
         args = self.splitargs(m.group(2))
 
