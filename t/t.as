@@ -24,7 +24,7 @@ adcb [r15*8+r12+32], 8       # 438054FC2008
 adcw fs:[rax+rbx*4+24], 8    # 64668354981808
 adcw [0x888888], 8           # 668314258888880008
 adcw [rsp], 8                # 6683142408
-adcw [rbp+32], 8             # 6683542008
+adcw [rbp+32], 8             # 6683552008
 adcw [r15+32], 8             # 664183572008
 adcw [r15+r12+32], 8         # 66438354272008
 adcw [r15*8+r12+32], 8       # 66438354FC2008
@@ -43,16 +43,16 @@ adcq [r15+32], 8             # 4983572008
 adcq [r15+r12+32], 8         # 4B8354272008
 adcq [r15*8+r12+32], 8       # 4B8354FC2008
 adc al, bh                   # 10F8
-adc r14l, ah                 # 4110C6
+adc r14l, ah                 # 4110E6
 adc fs:[rax+rbx*4+24], r13l  # 6444106C9818
 adc [0x888888], spl          # 4010242588888800
 adc [rsp], ch                # 102C24
 adc [rbp+32], bh             # 107D20
 adc [r15+32], dl             # 41105720
-adc [r15+r12+32], al         # 4310443C20
+adc [r15+r12+32], al         # 4310442720
 adc [r15*8+r12+32], dl       # 431054FC20
 adc ax, bx                   # 6611D8
-adc r14w, ax                 # 664111C5
+adc r14w, ax                 # 664111C6
 adc fs:[rax+rbx*4+24], r13w  # 646644116C9818
 adc [0x888888], sp           # 6611242588888800
 adc [rsp], cx                # 66110C24
@@ -60,7 +60,7 @@ adc [rbp+32], bx             # 66115D20
 adc [r15+32], dx             # 6641115720
 adc [r15+r12+32], ax         # 664311442720
 adc [r15*8+r12+32], dx       # 66431154FC20
-adc eax, ebx                 # 11C8
+adc eax, ebx                 # 11D8
 adc r14d, eax                # 4111C6
 adc fs:[rax+rbx*4+24], r13d  # 6444116C9818
 adc [0x888888], esp          # 11242588888800
@@ -69,7 +69,7 @@ adc [rbp+32], ebx            # 115D20
 adc [r15+32], edx            # 41115720
 adc [r15+r12+32], eax        # 4311442720
 adc [r15*8+r12+32], edx      # 431154FC20
-adc rax, rbx                 # 4811C8
+adc rax, rbx                 # 4811D8
 adc r14, rax                 # 4911C6
 adc fs:[rax+rbx*4+24], r13   # 644C116C9818
 adc [0x888888], rsp          # 4811242588888800
@@ -79,7 +79,7 @@ adc [r15+32], rdx            # 49115720
 adc [r15+r12+32], rax        # 4B11442720
 adc [r15*8+r12+32], rdx      # 4B1154FC20
 adc bh, al                   # 10C7
-adc ah, r14l                 # 4410F0
+adc ah, r14l                 # 4410F4
 adc r13l, fs:[rax+rbx*4+24]  # 6444126C9818
 adc spl, [0x888888]          # 4012242588888800
 adc ch, [rsp]                # 122C24
@@ -88,29 +88,29 @@ adc dl, [r15+32]             # 41125720
 adc al, [r15+r12+32]         # 4312442720
 adc dl, [r15*8+r12+32]       # 431254FC20
 adc bx, ax                   # 6611C3
-adc ax, r14w                 # 664411C6
+adc ax, r14w                 # 664411F0
 adc r13w, fs:[rax+rbx*4+24]  # 646644136C9818
-adc sp, [0x888888]
-adc cx, [rsp]
-adc bx, [rbp+32]
-adc dx, [r15+32]
-adc ax, [r15+r12+32]
-adc dx, [r15*8+r12+32]
-adc ebx, eax
-adc eax, r14d
-adc r13d, fs:[rax+rbx*4+24]
-adc esp, [0x888888]
-adc ecx, [rsp]
-adc ebx, [rbp+32]
-adc edx, [r15+32]
-adc eax, [r15+r12+32]
-adc edx, [r15*8+r12+32]
-adc rbx, rax
-adc rax, r14
-adc r13, fs:[rax+rbx*4+24]
-adc rsp, [0x888888]
-adc rcx, [rsp]
-adc rbx, [rbp+32]
-adc rdx, [r15+32]
-adc rax, [r15+r12+32]
-adc rdx, [r15*8+r12+32]
+adc sp, [0x888888]           # 6613242588888800
+adc cx, [rsp]                # 66130C24
+adc bx, [rbp+32]             # 66135D20
+adc dx, [r15+32]             # 6641135720
+adc ax, [r15+r12+32]         # 664313442720
+adc dx, [r15*8+r12+32]       # 66431354FC20
+adc ebx, eax                 # 11C3
+adc eax, r14d                # 4411F0
+adc r13d, fs:[rax+rbx*4+24]  # 6444136C9818
+adc esp, [0x888888]          # 13242588888800
+adc ecx, [rsp]               # 130C24
+adc ebx, [rbp+32]            # 135D20
+adc edx, [r15+32]            # 41135720
+adc eax, [r15+r12+32]        # 4313442720
+adc edx, [r15*8+r12+32]      # 431354FC20
+adc rbx, rax                 # 4811C3
+adc rax, r14                 # 4C11F0
+adc r13, fs:[rax+rbx*4+24]   # 644C136C9818
+adc rsp, [0x888888]          # 4813242588888800
+adc rcx, [rsp]               # 48130C24
+adc rbx, [rbp+32]            # 48135D20
+adc rdx, [r15+32]            # 49135720
+adc rax, [r15+r12+32]        # 4B13442720
+adc rdx, [r15*8+r12+32]      # 4B1354FC20
