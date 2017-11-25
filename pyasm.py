@@ -1,4 +1,4 @@
-from re import fullmatch
+import re
 
 NORMAL = 0
 SINGLE_QUOTE = 1
@@ -34,7 +34,7 @@ def translate(file, out):
 
     with open(file) as f:
         for line in f:
-            m = fullmatch(r'(.*)(\n?)', line)
+            m = re.fullmatch(r'(.*)(\n?)', line)
             line = m.group(1)
             eol = m.group(2)
 
