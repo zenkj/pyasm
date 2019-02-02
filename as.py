@@ -78,31 +78,52 @@ class TypeManager(object):
         self.alltypes[name] = tp
 
 
+class Packer:
+    def __init__(self):
+        self.formats = {
+            'i8':  'b',
+            'I8':  'B',
+            'i16': 'h',
+            'I16': 'H',
+            'i32': 'i',
+            'I32': 'I',
+            'i64': 'l',
+            'I64': 'L',
+            'f32': 'f',
+            'f64': 'd',
+            }
+
+    def pack(f, n):
+        return struct.pack(_pack_formats[f], n)
+
 
 class AS:
-    """
-    features:
-        # no .include
-        # it can be handled in python
+        """
+        features:
+            # no .include
+            # it can be handled in python
 
-        # .byte
-        # handle string/hex/oct/float
-        # .byte 0, 0x10, 'ab"c\n', "a\nb'c", 'a'
+            # .byte
+            # handle string/hex/oct/float
+            # .byte 0, 0x10, 'ab"c\n', "a\nb'c", 'a'
 
-        # .type
-        # working
+            # .type
+            # working
 
-        # .define
-        # TBD
-        # no define now
-        #defines = {}
+            # .define
+            # TBD
+            # no define now
+            #defines = {}
 
-        # .macro
-        # TBD
-        #macros = {}
-    """
+            # .macro
+            # TBD
+            #macros = {}
+        """
 
     def __init__(self):
+
+        self.packer = Packer()
+
         # assembly operation map
         self.asmap = {}
 
@@ -123,7 +144,6 @@ class AS:
         self.currtp = None
         self.initTypeMap()
         self.initAsMap()
-
 
     def initTypeMap(self):
         def typeop(op, params):
@@ -165,230 +185,352 @@ class AS:
                 '66::{5:02X}:/a16i16|'
                 '::{5:02X}:/a32i32|'
                 ':48:{5:02X}:/a64i32|' 
-                '::80:{0:02X}/R8i8|'
-                '66::83:{0:02X}/R16i8|'
-                '66::81:{0:02X}/R16i16|'
-                '::83:{0:02X}/R32i8|'
-                '::81:{0:02X}/R32i32|' 
-                ':48:83:{0:02X}/R64i8|'
-                ':48:81:{0:02X}/R64i32|' 
-                '::{0:02X}:/R8r8|'
+                '::80:{0:02X}/b8i8|'
+                '66::83:{0:02X}/b16i8|'
+                '66::81:{0:02X}/b16i16|'
+                '::83:{0:02X}/b32i8|'
+                '::81:{0:02X}/b32i32|' 
+                ':48:83:{0:02X}/b64i8|'
+                ':48:81:{0:02X}/b64i32|' 
+                '::{0:02X}:/b8r8|'
                 '::{0:02X}:/mr8|'
-                '66::{1:02X}:/R16r16|'
+                '66::{1:02X}:/b16r16|'
                 '66::{1:02X}:/mr16|'
-                '::{1:02X}:/R32r32|'
+                '::{1:02X}:/b32r32|'
                 '::{1:02X}:/mr32|' 
-                ':48:{1:02X}:/R64r64|'
+                ':48:{1:02X}:/b64r64|'
                 ':48:{1:02X}:/mr64|'
-                '::{2:02X}:/r8R8|'
+                '::{2:02X}:/r8b8|'
                 '::{2:02X}:/r8m|'
-                '66::{3:02X}:/r16R16|'
+                '66::{3:02X}:/r16b16|'
                 '66::{3:02X}:/r16m|' 
-                '::{3:02X}:/r32R32|'
+                '::{3:02X}:/r32b32|'
                 '::{3:02X}:/r32m|'
                 ':48:{3:02X}:/r64m'
                 ).format(n3+0, n3+1, n3+2, n3+3, n3+4, n3+5)
-            self.asmap['{}b-2'.format(name)] = '::80:{:02X}/mi8'.format(n3)
-            self.asmap['{}w-2'.format(name)] = '66::83:{:02X}/mi8|66::81:{:02X}/mi16'.format(n3)
-            self.asmap['{}d-2'.format(name)] = '::83:{:02X}/mi8|::81:{:02X}/mi32'.format(n3)
-            self.asmap['{}l-2'.format(name)] = self.asmap['{}d-2'.format(name)]
-            self.asmap['{}q-2'.format(name)] = ':48:83:{:02X}/mi8|:48:81:{:02X}/mi32'.format(n3)
+            self.asmap['{}b-2'.format(name)] = '::80:{0:02X}/mi8'.format(n3)
+            self.asmap['{}w-2'.format(name)] = '66::83:{0:02X}/mi8|66::81:{0:02X}/mi16'.format(n3)
+            self.asmap['{}d-2'.format(name)] = '::83:{0:02X}/mi8|::81:{0:02X}/mi32'.format(n3)
+            self.asmap['{}l-2'.format(name)] = '::83:{0:02X}/mi8|::81:{0:02X}/mi32'.format(n3)
+            self.asmap['{}q-2'.format(name)] = ':48:83:{0:02X}/mi8|:48:81:{0:02X}/mi32'.format(n3)
 
-    
-    
+        for name, n in [('rol', 0), ('ror', 1), ('rcl', 2), ('rcr', 3), ('shl', 4), ('sal', 4), ('shr', 5), ('sar', 7)]:
+            n3 = n<<3
+            self.asmap['{}-2'.format(name)] = (
+                    '::D0:{0:02X}/b8d1|'
+                    '::D2:{0:02X}/b8c8|'
+                    '::C0:{0:02X}/b8i8|'
+                    '66::D1:{0:02X}/b16d1|'
+                    '66::D3:{0:02X}/b16c8|'
+                    '66::C1:{0:02X}/b16i8|'
+                    '::D1:{0:02X}/b32d1|'
+                    '::D3:{0:02X}/b32c8|'
+                    '::C1:{0:02X}/b32i8|'
+                    ':48:D1:{0:02X}/b64d1|'
+                    ':48:D3:{0:02X}/b64c8|'
+                    ':48:C1:{0:02X}/b64i8'
+                    ).format(n3)
+            self.asmap['{}b-2'.format(name)] = (
+                    '::D0:{0:02X}/md1|'
+                    '::D2:{0:02X}/mc8|'
+                    '::C0:{0:02X}/mi8'
+                    ).format(n3)
+            self.asmap['{}w-2'.format(name)] = (
+                    '66::D1:{0:02X}/md1|'
+                    '66::D3:{0:02X}/mc8|'
+                    '66::C1:{0:02X}/mi8'
+                    ).format(n3)
+            self.asmap['{}d-2'.format(name)] = (
+                    '::D1:{0:02X}/md1|'
+                    '::D3:{0:02X}/mc8|'
+                    '::C1:{0:02X}/mi8'
+                    ).format(n3)
+            self.asmap['{}l-2'.format(name)] = (
+                    '::D1:{0:02X}/md1|'
+                    '::D3:{0:02X}/mc8|'
+                    '::C1:{0:02X}/mi8'
+                    ).format(n3)
+            self.asmap['{}q-2'.format(name)] = (
+                    ':48:D1:{0:02X}/md1|'
+                    ':48:D3:{0:02X}/mc8|'
+                    ':48:C1:{0:02X}/mi8'
+                    ).format(n3)
+
+        for cc, n in cclist:
+            self.asmap['cmov{}-2'.format(cc)] = (
+                '66::0F4{0:X}:/r16b16|'
+                '66::0F4{0:X}:/r16m|'
+                '::0F4{0:X}:/r32b32|'
+                '::0F4{0:X}:/r32m|'
+                ':48:0F4{0:X}:/r64b64|'
+                ':48:0F4{0:X}:/r64m'
+                ).format(n)
+            self.asmap['j{}-1'.format(cc)] = '::7{0:X}:/i8|::0F8{0:X}:/i32'.format(n)
+            self.asmap['set{}-1'.format(cc)] = '::0F9{0:X}:00/b8|::0F9{0:X}:00/m'.format(n)
+
+        self.asmap['inc-1'] = '::FE:00/b8|66::FF:00/b16|::FF:00/b32|:48:FF:00/b64'
+        self.asmap['incb-1'] = '::FE:00/m'
+        self.asmap['incw-1'] = '66::FF:00/m'
+        self.asmap['incd-1'] = '::FF:00/m'
+        self.asmap['incl-1'] = '::FF:00/m'
+        self.asmap['incq-1'] = ':48:FF:00/m'
+        self.asmap['dec-1'] = '::FE:08/b8|66::FF:08/b16|::FF:08/b32|:48:FF:08/b64'
+        self.asmap['decb-1'] = '::FE:08/m'
+        self.asmap['decw-1'] = '66::FF:08/m'
+        self.asmap['decd-1'] = '::FF:08/m'
+        self.asmap['decl-1'] = '::FF:08/m'
+        self.asmap['decq-1'] = ':48:FF:08/m'
+        self.asmap['push-1'] = '66::50:/B16|::50:/B64|66::FF:30/b16|::FF:30/b64|::6A:/i8|66::68:/i16|::68:/i32'
+        self.asmap['push-fs'] = '::0FA0:/'
+        self.asmap['push-gs'] = '::0fA8:/'
+        self.asmap['pushw-1'] = '66::FF:30/m'
+        self.asmap['pushq-1'] = '::FF:30/m'
+        self.asmap['pop-1'] = '66::58:/B16|::58:/B64|66::8F:00/b16|::8F:00/b64'
+        self.asmap['pop-fs'] = '::0FA1:/'
+        self.asmap['pop-gs'] = '::0fA9:/'
+        self.asmap['popw-1'] = '66::8F:00/m'
+        self.asmap['popq-1'] = '::8F:00/m'
+        self.asmap['test-2'] = (
+            '::A8:/a8i8|'
+            '66::A9:/a16i16|'
+            '::A9:/a32i32|'
+            ':48:A9:/a64i32|'
+            '::F6:00/b8i8|'
+            '66::F7:00/b16i16|'
+            '::F7:00/b32i32|'
+            ':48:F7:00/b64i32|'
+            '::84:/b8r8|'
+            '::84:/mr8|'
+            '66::85:/b16r16|'
+            '66::85:/mr16|'
+            '::85:/b32r32|'
+            '::85:/mr32|'
+            ':48:85:/b64r64|'
+            ':48:85:/mr64'
+            )
+        self.asmap['testb-2'] = '::F6:00/mi8'
+        self.asmap['testw-2'] = '66::F7:00/mi16'
+        self.asmap['testd-2'] = '::F7:00/mi32'
+        self.asmap['testl-2'] = '::F7:00/mi32'
+        self.asmap['testq-2'] = ':48:F7:00/mi32'
+        self.asmap['lea-2'] = '66::8D:/r16m|::8D:/r32m|:48:8D:/r64m'
+        self.asmap['nop-0'] = '::90:/'
+        self.asmap['cbw-0'] = '66::98:/'
+        self.asmap['cwde-0'] = '::98:/'
+        self.asmap['cdqe-0'] = ':48:98:/'
+        self.asmap['cwd-0'] = '66::99:/'
+        self.asmap['cdq-0'] = '::99:/'
+        self.asmap['cqo-0'] = ':48:99:/'
+        self.asmap['ret-0'] = 
+        self.asmap['ret-1'] = 
+        self.asmap['enter-0'] = 
+        self.asmap['leave-0'] = '::C9:/'
+        self.asmap['mov-2'] = (
+            )
+        self.asmap['jmp-1'] = (
+            )
+        self.asmap['call-1'] = (
+            )
+            
+
     def dotemplateone(self, tmpl, op, params):
 
         """
         处理一个指令模板 
 
         x86_64指令结构:
-          prefix     rex     opcode    modrm       sib       displacement  immediate
-                  0100 WRXB          mm reg r/m  ss iii bbb
-                  7654 3210          76 543 210  76 543 210
+              prefix     rex     opcode    modrm       sib       displacement  immediate
+                      0100 WRXB          mm reg r/m  ss iii bbb
+                      7654 3210          76 543 210  76 543 210
         
         模板结构：
-        [prefix]:[rex]:opcode:[modrm]/[operands]
+
+            [prefix]:[rex]:opcode:[modrm]/[operands]
         
         模板命令列表:
-          a
-            register AL/AX/EAX/RAX, a8/a16/a32/a64 respectively
-          i
-            signed immediate integer, i8/i16/i32/i64
-          I
-            unsigned immediate integer, I8/I16/I32/I64
-          f
-            floating point number, f32/f64
-          r
-            registers encoded in reg of modrm, and R in rex optionally.
-            r8/r16/r32/r64
-          c
-            registers encoded in reg of opcode, and B in rex optionally.
-            c8/c16/c32/c64
-          R
-            registers encoded in r/m of modrm, and B in rex optionally.
-            R8/R16/R32/R64
-          m
-            memory location encoded in r/m of modrm, and sib optionally.
+              a
+                register AL/AX/EAX/RAX, a8/a16/a32/a64 respectively
+              c
+                register CL/CX/ECX/RCX, c8/c16/c32/c64
+              i
+                signed immediate integer, i8/i16/i32/i64
+              I
+                unsigned immediate integer, I8/I16/I32/I64
+              f
+                floating point number, f32/f64
+              d
+                direct immediate integer, d1 means 1, d123 means 123
+              r
+                registers encoded in reg of modrm, and R in rex optionally.
+                r8/r16/r32/r64
+              B
+                registers encoded in reg of opcode, and B in rex optionally.
+                B8/B16/B32/B64
+              b
+                registers encoded in r/m of modrm, and B in rex optionally.
+                b8/b16/b32/b64
+              m
+                memory location encoded in r/m of modrm, and sib optionally.
 
         内存操作数结构：
-          sr:[base+index*scale+offset]
-          sr
-            段寄存器前缀，cs/ds/es/fs
-          base
-            基址寄存器
-          index
-            索引寄存器，除rsp外其他15个通用寄存器
-          scale
-            倍数，1/2/4/8
-          offset
-            偏移值，8位或32位
+              sr:[base+index*scale+offset]
+              sr
+                段寄存器前缀，cs/ds/es/fs
+              base
+                基址寄存器
+              index
+                索引寄存器，除rsp外其他15个通用寄存器
+              scale
+                倍数，1/2/4/8
+              offset
+                偏移值，8位或32位
 
         内存操作数处理流程：
-          1. 先把reg:state.ptr这种类型的转化为reg+nnn
-          2. 然后再取出segment register(opt)和[]中的内容
-              re.match(r'\s*((\w+)\s*:)?\s*\[\s*([^\]]+)\s*\]\s*', ' fs : [ rax + rdx * 4 - 5 ] ')
-          3. 根据段寄存器设置段前缀
-          4. 然后解析[]中的内容
-              re.split(r'\s*([+-])\s*', 'a + 4 * b - 5 '.strip())
-          5. 然后把scale*index取出来
-              re.split(r'\s*\*\s*', '4 * rbx'.strip())
-          6. 然后就是把基址/索引/倍数/偏移取出来，各种排列组合:
-             寄存器基址/索引*倍数/偏移，三部分每个都可以存在或不存在，
-             除去三部分都不存在的情况，共2*2*2-1 = 7种，加上rip相对地址，共8种
+              1. 先把reg:state.ptr这种类型的转化为reg+nnn
+              2. 然后再取出segment register(opt)和[]中的内容
+                  re.match(r'\s*((\w+)\s*:)?\s*\[\s*([^\]]+)\s*\]\s*', ' fs : [ rax + rdx * 4 - 5 ] ')
+              3. 根据段寄存器设置段前缀
+              4. 然后解析[]中的内容
+                  re.split(r'\s*([+-])\s*', 'a + 4 * b - 5 '.strip())
+              5. 然后把scale*index取出来
+                  re.split(r'\s*\*\s*', '4 * rbx'.strip())
+              6. 然后就是把基址/索引/倍数/偏移取出来，各种排列组合:
+                 寄存器基址/索引*倍数/偏移，三部分每个都可以存在或不存在，
+                 除去三部分都不存在的情况，共2*2*2-1 = 7种，加上rip相对地址，共8种
 
-             mod!=11 and r/m=100意味着存在SIB，有没有REX都不影响:
-               所以基址为rsp和r12时，不管有没有偏移，都只能使用SIB;
-             mod=0 and r/m=101意味着RIP相对寻址，有没有REX都不影响:
-               所以基址为rbp和r13并且没有偏移时，只能使用偏移0(mod=01, displacement=0)
+                 mod!=11 and r/m=100意味着存在SIB，有没有REX都不影响:
+                   所以基址为rsp和r12时，不管有没有偏移，都只能使用SIB;
+                 mod=0 and r/m=101意味着RIP相对寻址，有没有REX都不影响:
+                   所以基址为rbp和r13并且没有偏移时，只能使用偏移0(mod=01, displacement=0)
             
         内存操作数种类(8种排列组合C1-C8)：
-          1. 寄存器基址
-            e.g.: [rax/rbx/rcx/rdx/rsp/rbp/rsi/rdi/r8-r15]
-            (1) rax/rbx/rcx/rdx/rsi/rdi:
-               mod    r/m
-               00     nnn(not 100 and 101)
-            (2) rsp:
-               mod    r/m       ss iii bbb
-               00     100       nn 100 100
-            (3) r12:
-             REX.B   mod    r/m    ss iii bbb
-               1      00    100    nn 100 100
-            (4) rbp:
-               mod    r/m   displacement
-                01    101   00000000
-            (5) r13:
-             REX.B   mod    r/m    displacement
-               1      01    101    00000000
-            (6) r8-r11/r14/r15:
-             REX.B   mod    r/m
-               1      00    nnn(not 100 and 101)
-            
-          2. 绝对地址
-            [1234]
-                mod    r/m      ss iii bbb   displacement
-                00     100      nn 100 101   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-            
-          3. 寄存器基址+偏移
-            e.g.: [rax/rbx/rcx/rdx/rsp/rbp/rsi/rdi/r8-r15 + 12]
-            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi + offset:
-              mod     r/m             displacement
-              01      nnn(not 100)    nnnnnnnn
-              10      nnn(not 100)    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-            (2) rsp + offset:
-               mod    r/m       ss iii bbb    displacement
-               01     100       nn 100 100    nnnnnnnn
-               10     100       nn 100 100    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-            (3) r12 + offset: 
-             REX.B   mod    r/m    ss iii bbb   displacement
-               1      01    100    nn 100 100   nnnnnnnn
-               1      10    100    nn 100 100   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-            (4) r8-r11/r13-r15 + offset:
-             REX.B   mod    r/m            displacement
-               1      01    nnn(not 100)   nnnnnnnn
-               1      10    nnn(not 100)   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-            
-          4. rip相对地址
-            e.g.: [rip+12]
-            mod   r/m   displacement
-             00   101   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-           
-          5. 索引*倍数 (不存在，有索引的时候必须有基址或32位偏移，这种编码为偏移=0)
-            e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8] (只有rsp不能作索引, 100意味着没有索引)
-            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi * 1/2/4/8:
-                mod    r/m      ss iii          bbb    displacement
-                00     100      00 nnn(not 100) 101    00000000 00000000 00000000 00000000
-                00     100      01 nnn(not 100) 101    00000000 00000000 00000000 00000000
-                00     100      10 nnn(not 100) 101    00000000 00000000 00000000 00000000
-                00     100      11 nnn(not 100) 101    00000000 00000000 00000000 00000000
-            (2) r8-r15 * 1/2/4/8:
-                REX.X  mod    r/m      ss iii             bbb    displacement
-                  1    00     100      00 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
-                  1    00     100      01 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
-                  1    00     100      10 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
-                  1    00     100      11 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
-            
-          6. 索引*倍数 + 寄存器基址
-            e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8 +
-                   rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi/r8-r15]
-            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rdi/rsi:
-                mod  r/m     ss iii          bbb
-                00   100     nn nnn(not 100) nnn(not 101)
-            (2) r8-r15*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rdi/rsi:
-                REX.X REX.B  mod  r/m     ss iii bbb
-                  1     0    00   100     nn nnn nnn(not 101)
-            (3) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + r8-r12/r14/r15:
-                REX.X REX.B  mod  r/m     ss iii          bbb
-                  0     1    00   100     nn nnn(not 100) nnn(not 101)
-            (4) r8-r15*1/2/4/8 + r8-r12/r14/r15:
-                REX.X REX.B  mod  r/m     ss iii bbb
-                  1     1    00   100     nn nnn nnn(not 101)
-            (5) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + rbp:
-                mod  r/m     ss iii          bbb  displacement
-                01   100     nn nnn(not 100) 101  00000000
-            (6) r8-r15*1/2/4/8 + rbp:
-                REX.X REX.B  mod  r/m     ss iii bbb  displacement
-                  1     0    01   100     nn nnn 101  00000000
-            (7) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + r13:
-                REX.X REX.B mod  r/m     ss iii          bbb  displacement
-                  0     1   01   100     nn nnn(not 100) 101  00000000
-            (8) r8-r15*1/2/4/8 + r13:
-                REX.X REX.B  mod  r/m     ss iii bbb  displacement
-                  1     1    01   100     nn nnn 101  00000000
-            
-          7. 索引*倍数 + 偏移 (只能32位偏移)
-            e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8 + 1234] (只有rsp不能作索引, 100意味着没有索引)
-            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi * 1/2/4/8 + offset:
-                mod    r/m      ss iii          bbb    displacement
-                00     100      00 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-                00     100      01 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-                00     100      10 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-                00     100      11 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-            (2) r8-r15 * 1/2/4/8 + offset:
-                REX.X  mod    r/m      ss iii             bbb    displacement
-                  1    00     100      00 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-                  1    00     100      01 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-                  1    00     100      10 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-                  1    00     100      11 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+              1. 寄存器基址
+                e.g.: [rax/rbx/rcx/rdx/rsp/rbp/rsi/rdi/r8-r15]
+                (1) rax/rbx/rcx/rdx/rsi/rdi:
+                   mod    r/m
+                   00     nnn(not 100 and 101)
+                (2) rsp:
+                   mod    r/m       ss iii bbb
+                   00     100       nn 100 100
+                (3) r12:
+                 REX.B   mod    r/m    ss iii bbb
+                   1      00    100    nn 100 100
+                (4) rbp:
+                   mod    r/m   displacement
+                    01    101   00000000
+                (5) r13:
+                 REX.B   mod    r/m    displacement
+                   1      01    101    00000000
+                (6) r8-r11/r14/r15:
+                 REX.B   mod    r/m
+                   1      00    nnn(not 100 and 101)
+                
+              2. 绝对地址
+                [1234]
+                    mod    r/m      ss iii bbb   displacement
+                    00     100      nn 100 101   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                
+              3. 寄存器基址+偏移
+                e.g.: [rax/rbx/rcx/rdx/rsp/rbp/rsi/rdi/r8-r15 + 12]
+                (1) rax/rbx/rcx/rdx/rbp/rsi/rdi + offset:
+                  mod     r/m             displacement
+                  01      nnn(not 100)    nnnnnnnn
+                  10      nnn(not 100)    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                (2) rsp + offset:
+                   mod    r/m       ss iii bbb    displacement
+                   01     100       nn 100 100    nnnnnnnn
+                   10     100       nn 100 100    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                (3) r12 + offset: 
+                 REX.B   mod    r/m    ss iii bbb   displacement
+                   1      01    100    nn 100 100   nnnnnnnn
+                   1      10    100    nn 100 100   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                (4) r8-r11/r13-r15 + offset:
+                 REX.B   mod    r/m            displacement
+                   1      01    nnn(not 100)   nnnnnnnn
+                   1      10    nnn(not 100)   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                
+              4. rip相对地址
+                e.g.: [rip+12]
+                mod   r/m   displacement
+                 00   101   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+               
+              5. 索引*倍数 (不存在，有索引的时候必须有基址或32位偏移，这种编码为偏移=0)
+                e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8] (只有rsp不能作索引, 100意味着没有索引)
+                (1) rax/rbx/rcx/rdx/rbp/rsi/rdi * 1/2/4/8:
+                    mod    r/m      ss iii          bbb    displacement
+                    00     100      00 nnn(not 100) 101    00000000 00000000 00000000 00000000
+                    00     100      01 nnn(not 100) 101    00000000 00000000 00000000 00000000
+                    00     100      10 nnn(not 100) 101    00000000 00000000 00000000 00000000
+                    00     100      11 nnn(not 100) 101    00000000 00000000 00000000 00000000
+                (2) r8-r15 * 1/2/4/8:
+                    REX.X  mod    r/m      ss iii             bbb    displacement
+                      1    00     100      00 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
+                      1    00     100      01 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
+                      1    00     100      10 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
+                      1    00     100      11 nnn(100 ok too) 101    00000000 00000000 00000000 00000000
+                
+              6. 索引*倍数 + 寄存器基址
+                e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8 +
+                       rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi/r8-r15]
+                (1) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rdi/rsi:
+                    mod  r/m     ss iii          bbb
+                    00   100     nn nnn(not 100) nnn(not 101)
+                (2) r8-r15*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rdi/rsi:
+                    REX.X REX.B  mod  r/m     ss iii bbb
+                      1     0    00   100     nn nnn nnn(not 101)
+                (3) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + r8-r12/r14/r15:
+                    REX.X REX.B  mod  r/m     ss iii          bbb
+                      0     1    00   100     nn nnn(not 100) nnn(not 101)
+                (4) r8-r15*1/2/4/8 + r8-r12/r14/r15:
+                    REX.X REX.B  mod  r/m     ss iii bbb
+                      1     1    00   100     nn nnn nnn(not 101)
+                (5) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + rbp:
+                    mod  r/m     ss iii          bbb  displacement
+                    01   100     nn nnn(not 100) 101  00000000
+                (6) r8-r15*1/2/4/8 + rbp:
+                    REX.X REX.B  mod  r/m     ss iii bbb  displacement
+                      1     0    01   100     nn nnn 101  00000000
+                (7) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + r13:
+                    REX.X REX.B mod  r/m     ss iii          bbb  displacement
+                      0     1   01   100     nn nnn(not 100) 101  00000000
+                (8) r8-r15*1/2/4/8 + r13:
+                    REX.X REX.B  mod  r/m     ss iii bbb  displacement
+                      1     1    01   100     nn nnn 101  00000000
+                
+              7. 索引*倍数 + 偏移 (只能32位偏移)
+                e.g.: [rax/rbx/rcx/rdx/rbp/rsi/rdi/r8-r15 * 1/2/4/8 + 1234] (只有rsp不能作索引, 100意味着没有索引)
+                (1) rax/rbx/rcx/rdx/rbp/rsi/rdi * 1/2/4/8 + offset:
+                    mod    r/m      ss iii          bbb    displacement
+                    00     100      00 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                    00     100      01 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                    00     100      10 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                    00     100      11 nnn(not 100) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                (2) r8-r15 * 1/2/4/8 + offset:
+                    REX.X  mod    r/m      ss iii             bbb    displacement
+                      1    00     100      00 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                      1    00     100      01 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                      1    00     100      10 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                      1    00     100      11 nnn(100 ok too) 101    nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
 
-          8. 寄存器基址+索引*倍数+偏移
-            e.g.: [rax/rbx/rcx/rdx/rbp/di/rsi/r8-r15 * 1/2/4/8 +
-                   rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi/r8-r15 + 1234]
-            (1) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi + offset:
-                mod  r/m     ss iii          bbb   displacement
-                01   100     nn nnn(not 100) nnn   nnnnnnnn
-                10   100     nn nnn(not 100) nnn   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-            (2) r8-r15*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi + offset:
-                REX.X REX.B  mod  r/m     ss iii bbb   displacement
-                  1     0    01   100     nn nnn nnn   nnnnnnnn
-                  1     0    10   100     nn nnn nnn   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-            (3) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + r8-r15 + offset:
-                REX.X REX.B mod  r/m     ss iii          bbb  displacement
-                  0     1   01   100     nn nnn(not 100) nnn  nnnnnnnn
-                  0     1   10   100     nn nnn(not 100) nnn  nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
-            (4) r8-r15*1/2/4/8 + r8-r15 + offset:
-                REX.X REX.B  mod  r/m     ss iii bbb  displacement
-                  1     1    01   100     nn nnn nnn  nnnnnnnn
-                  1     1    10   100     nn nnn nnn  nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+              8. 寄存器基址+索引*倍数+偏移
+                e.g.: [rax/rbx/rcx/rdx/rbp/di/rsi/r8-r15 * 1/2/4/8 +
+                       rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi/r8-r15 + 1234]
+                (1) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi + offset:
+                    mod  r/m     ss iii          bbb   displacement
+                    01   100     nn nnn(not 100) nnn   nnnnnnnn
+                    10   100     nn nnn(not 100) nnn   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                (2) r8-r15*1/2/4/8 + rax/rbx/rcx/rdx/rsp/rbp/rdi/rsi + offset:
+                    REX.X REX.B  mod  r/m     ss iii bbb   displacement
+                      1     0    01   100     nn nnn nnn   nnnnnnnn
+                      1     0    10   100     nn nnn nnn   nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                (3) rax/rbx/rcx/rdx/rbp/rsi/rdi*1/2/4/8 + r8-r15 + offset:
+                    REX.X REX.B mod  r/m     ss iii          bbb  displacement
+                      0     1   01   100     nn nnn(not 100) nnn  nnnnnnnn
+                      0     1   10   100     nn nnn(not 100) nnn  nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
+                (4) r8-r15*1/2/4/8 + r8-r15 + offset:
+                    REX.X REX.B  mod  r/m     ss iii bbb  displacement
+                      1     1    01   100     nn nnn nnn  nnnnnnnn
+                      1     1    10   100     nn nnn nnn  nnnnnnnn nnnnnnnn nnnnnnnn nnnnnnnn
         """
 
         m = re.fullmatch(r'([0-9A-F]*):([0-9A-F]*):([0-9A-F]+):([0-9A-F]*)/([a-zA-Z0-9]*)', tmpl) 
@@ -423,7 +565,6 @@ class AS:
                 sib.append(0)
             return sib
 
-
         def ensuren(n):
             if n == 8 or n == 16 or n == 32 or n == 64:
                 return
@@ -438,7 +579,11 @@ class AS:
                     raise ValueError('invalid ax value: {} bits'.format(n))
             elif o == 'i' or o == 'I' or o == 'f':
                 imm = leval(params.pop(0))
-                immediate = pack(o+sn, imm)
+                immediate = self.packer.pack(o+sn, imm)
+            elif o == 'd':
+                imm = leval(params.pop(0))
+                if n != imm:
+                    raise ValueError('invalid immediate integer "{}", should be"{}"'.format(imm, n))
             elif o == 'r': # reg in modrm, and R in rex optionally
                 ensuren(n)
                 p = params.pop(0)
@@ -448,7 +593,7 @@ class AS:
                 if code >= 8: # need REX
                     REX()[0] |= ((code&8)>>1)
                 MODRM()[0] |= ((code&7)<<3)
-            elif o == 'c': # reg in opcode, and B in rex optionally
+            elif o == 'B': # reg in opcode, and B in rex optionally
                 ensuren(n)
                 p = params.pop(0)
                 if GPRbits[p] != n:
@@ -457,7 +602,7 @@ class AS:
                 if code >= 8: # need REX
                     REX()[0] |= ((code&8)>>3)
                 opcode[-1] |= (code&7)
-            elif o == 'R': # register in r/m in modrm, and B in rex optioanlly
+            elif o == 'b': # register in r/m in modrm, and B in rex optioanlly
                 ensuren(n)
                 p = params.pop(0)
                 if GPRbits[p] != n:
@@ -606,8 +751,6 @@ class AS:
                             MODRM()[0] = (MODRM()[0] & 0x3F) | 0x80
                             displacement = pack('i32', offset)
 
-
-
         # instruction = prefix(opt) + rex(opt) + opcode(1-3bytes) +
         #               modrm(opt) + sib(opt) + displacement(opt) + immediate(opt)
         self.resultbin.extend(prefix)
@@ -618,7 +761,6 @@ class AS:
         self.resultbin.extend(displacement)
         self.resultbin.extend(immediate)
 
-
     def dotemplate(self, tmpl, op, params):
         tmpls = tmpl.split('|')
         for t in tmpls:
@@ -627,6 +769,7 @@ class AS:
                 return
             except:
                 pass
+        raise ValueError('no template suitable for "{}" in "{}"'.format(op, tmpl))
 
     def splitargs(self, argline):
         argline = re.fullmatch(r'(.*),?', argline).group(1)
@@ -671,6 +814,7 @@ class AS:
         return [arg.strip() for arg in args]
 
     def doline(self, line):
+
         # ignore empty line and comment line
         if re.fullmatch(r'\s*(#.*)?\s*', line):
             return
@@ -689,9 +833,11 @@ class AS:
         if key not in self.opmap:
             key = opcode
             if key not in self.opmap:
-                key = '*'
+                key = '{}-{}'.format(opcode, '-'.join(args))
                 if key not in self.opmap:
-                    raise ValueError('unknown operation {}'.format(opcode))
+                    key = '*'
+                    if key not in self.opmap:
+                        raise ValueError('unknown operation {}'.format(opcode))
         op = self.opmap[key]
 
         if callable(op):
@@ -702,6 +848,39 @@ class AS:
             raise ValueError
 
 ########################### constant ##########################
+cclist = [
+    ('o',   0),
+    ('no',  1),
+    ('b',   2),
+    ('nb',  3),
+    ('e',   4),
+    ('ne',  5),
+    ('be',  6),
+    ('nbe', 7),
+    ('s',   8),
+    ('ns',  9),
+    ('p',   10),
+    ('np',  11),
+    ('l',   12),
+    ('nl',  13),
+    ('le',  14),
+    ('nle', 15),
+    ('c',    2),
+    ('nae',  2),
+    ('nc',   3),
+    ('ae',   3),
+    ('z',    4),
+    ('nz',   5),
+    ('na',   6),
+    ('a',    7),
+    ('pe',   10),
+    ('po',   11),
+    ('nge',  12),
+    ('ge',   13),
+    ('ng',   14),
+    ('g',    15),
+    ]
+
 regAbits = {
     'al':   8,
     'ax':   16,
@@ -866,6 +1045,7 @@ SegPrefix = {
     'gs':    0x65,
     'ss':    0x36,
     }
+
 Prefix = {
     # group 1
     'lock':  0xF0,
@@ -874,6 +1054,8 @@ Prefix = {
     'rep':   0xF3,
     'repe':  0xF3,
     'repz':  0xF3,
+    'repne': 0xF2,
+    'repnz': 0xF2,
     'bnd':   0xF2,
 
     # group 2
@@ -895,23 +1077,6 @@ Prefix = {
     # rex prefix
     'rex': 0x40,
     }
-
-
-_pack_formats = {
-    'i8':  'b',
-    'I8':  'B',
-    'i16': 'h',
-    'I16': 'H',
-    'i32': 'i',
-    'I32': 'I',
-    'i64': 'l',
-    'I64': 'L',
-    'f32': 'f',
-    'f64': 'd',
-    }
-
-def pack(f, n):
-    return struct.pack(_pack_formats[f], n)
 
 
 def translate(file, out):

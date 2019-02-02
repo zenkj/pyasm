@@ -1,1 +1,1 @@
-adcb fs:[rax+rbx*4+24], 8
+subb fs:[rax+rbx*4+24], 8
